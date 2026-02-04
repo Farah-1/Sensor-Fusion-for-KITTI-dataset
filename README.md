@@ -25,7 +25,25 @@ The pipeline integrates LiDAR point clouds and Camera RGB images to overcome the
 * **Evaluation Dashboard:** Automatically generates a 5-pane visualization for every frame, showing the entire transformation pipeline and real-time metrics.
 
 ---
+## Intelligent Object Refinement & Filtering
 
+To align YOLO's general-purpose detections with the strict **KITTI benchmark** requirements, a custom preprocessing layer was implemented to handle class mapping, overlaps, and noise filtering.
+
+### 1. Class Mapping & Logical Merging
+YOLO identifies many classes that do not exist in the KITTI dataset. My pipeline performs the following logic:
+* **Irrelevant Filtering:** Non-KITTI classes (e.g., 'dog', 'tree', 'chair') are automatically discarded.
+* **Cyclist Logic:** Since KITTI defines a `Cyclist` as a person on a bike, the pipeline checks for spatial overlap between `Person` and `Bicycle` detections. If a person is detected on/near a bicycle, they are merged into a single **Cyclist** label.
+* **Pedestrian Logic:** A `Person` detection without an associated bicycle is mapped to the **Pedestrian** class.
+
+### 2. Boundary Conflict Resolution (SAHI Artifacts)
+Using **SAHI (Sliced Aided Hyper Inference)** can sometimes cause "Double Detections" where an object on the boundary of two tiles is detected twice (e.g., once as a `Car` and once as a `Truck`).
+* **Score-Based Arbitration:** When two boxes overlap significantly in the same area, the pipeline performs **Class-Agnostic Non-Maximum Suppression (NMS)**.
+* The system compares the confidence scores and retains only the detection with the **highest score**, ensuring each physical object is represented by only one 3D bounding box.
+
+### 3. Metric Integrity (DontCare Filtering)
+The KITTI dataset contains "DontCare" regions (objects that are too small, occluded, or truncated to be evaluated fairly). 
+* **Noise Reduction:** My evaluation script filters out any detections that fall within these "DontCare" zones. 
+* **Accuracy:** This prevents the precision/recall metrics from being falsely penalized by objects the ground truth has intentionally ignored.
 ## 🛠 Mathematical Foundation
 
 ### 1. 3D to 2D Projection
@@ -96,8 +114,8 @@ For Late Fusion: python src/late_fusion.py
 
 Below is the output of the **Late Fusion vs Early Fusion** 
 
-![EARLY FUSION ](plots\000134\earlyFusion_000134.png)
-![LATE FUSION ](plots/000134/late_fusion_000134.png)
+![EARLY FUSION ](\plots\000134\earlyFusion_000134.png)
+![LATE FUSION ](\plots\000134\late_fusion_000134.png)
 
 ### Strategy Comparison: Early Fusion vs. Late Fusion
 
@@ -128,3 +146,18 @@ The following table compares the performance metrics of the two fusion strategie
 
 2. **Distance Accuracy**:
    - **Late Fusion** significantly outperforms in **MAE Dist** (e.g., Frame 000060 reduced error from 3.3m to 0.29m). Using a dedicated 3D model (PointPillars) provides much better spatial localization than 2D-to-3D back-projection.
+
+##  Future Work & Limitations
+
+During evaluation, a significant gap was identified in the **Recall** metrics due to class discrepancies between the pre-trained models and the KITTI Ground Truth.
+
+### 1. Van Detection Gap
+The **YOLOv8** model used in the 2D pipeline does not natively include a `Van` class. Consequently, all Van objects present in the KITTI dataset were treated as "Missed Detections" (False Negatives). 
+* **Solution:** Fine-tune the YOLO head on the KITTI training set specifically to distinguish between `Car`, `Van`, and `Truck`.
+
+### 2. PointPillars Truck Omission
+The **PointPillars** model utilized for 3D proposals was not trained on the `Truck` class. This resulted in a failure to generate 3D boxes for heavy vehicles in the **Late Fusion** pipeline, even when the 2D YOLO model correctly identified them. This discrepancy significantly penalized the final Recall.
+* **Solution:** Re-train or extend the PointPillars anchor heads to support `Truck` and `Tram` classes to ensure full modality alignment.
+
+### 3. Temporal Tracking
+Currently, the pipeline processes frames independently. Integrating a **Kalman Filter** or a **SORT-based tracker** would allow the system to maintain object "memory," smoothing out distance estimations and handling temporary occlusions where a model might fail for a single frame.
