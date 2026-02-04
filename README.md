@@ -44,7 +44,7 @@ Using **SAHI (Sliced Aided Hyper Inference)** can sometimes cause "Double Detect
 The KITTI dataset contains "DontCare" regions (objects that are too small, occluded, or truncated to be evaluated fairly). 
 * **Noise Reduction:** My evaluation script filters out any detections that fall within these "DontCare" zones. 
 * **Accuracy:** This prevents the precision/recall metrics from being falsely penalized by objects the ground truth has intentionally ignored.
-## 🛠 Mathematical Foundation
+##  Mathematical Foundation
 
 ### 1. 3D to 2D Projection
 To project a LiDAR point $P_{L} = [x, y, z, 1]^T$ onto the image plane $p = [u, v, 1]^T$:
